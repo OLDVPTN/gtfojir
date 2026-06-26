@@ -1,0 +1,35 @@
+services:
+  - type: worker
+    name: gatofo-whatsapp-bot
+    runtime: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PHONE_NUMBER
+        sync: false
+      - key: BOT_NUMBER
+        sync: false
+      - key: CUSTOM_PAIRING
+        value: GATOFO25
+      - key: OWNER_NUMBERS
+        sync: false
+      - key: SESSION_DIR
+        value: session
+      - key: OLLAMA_BASE_URL
+        sync: false
+      - key: OLLAMA_MODEL
+        sync: false
+      - key: USE_OLLAMA_FOR_CATEGORY
+        value: "true"
+      - key: CATEGORY_CONFIDENCE_THRESHOLD
+        value: "0.72"
+      - key: DEFAULT_CITY
+        value: Malang
+      - key: DEFAULT_AVG_TICKET
+        value: "25000"
+      - key: ALLOW_GROUPS
+        value: "false"

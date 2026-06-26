@@ -1,0 +1,16 @@
+{
+  "users": {},
+  "cards": [],
+  "missions": [],
+  "claims": [],
+  "partnerCodes": [],
+  "invites": [],
+  "logs": [],
+  "stats": {
+    "cardsOpened": 0,
+    "missionsCreated": 0,
+    "claims": 0,
+    "checkins": 0,
+    "estimatedGmv": 0
+  }
+}
