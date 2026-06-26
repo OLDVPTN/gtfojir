@@ -20,7 +20,7 @@
   "author": "Poko Group / Gatofo",
   "license": "UNLICENSED",
   "dependencies": {
-    "@whiskeysockets/baileys": "latest",
+    "@dnuzi/baileys": "^0.0.6",
     "@hapi/boom": "^10.0.1",
     "pino": "^10.3.1",
     "readline": "^1.3.0",
