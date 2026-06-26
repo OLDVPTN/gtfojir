@@ -5,7 +5,7 @@ import {
   useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion
-} from '@whiskeysockets/baileys'
+} from '@dnuzi/baileys'
 import pino from 'pino'
 import readline from 'readline'
 import chalk from 'chalk'
