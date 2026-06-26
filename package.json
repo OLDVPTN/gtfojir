@@ -1,7 +1,7 @@
 {
   "name": "gatofo-core-cell-simple-bot",
-  "version": "5.3.0",
-  "description": "Gatofo Core Cell WhatsApp bot with web-based pairing page for Render.",
+  "version": "5.3.1",
+  "description": "Gatofo Core Cell WhatsApp bot with fixed web pairing flow, reset session, and non-custom pairing by default.",
   "main": "index.js",
   "type": "module",
   "scripts": {

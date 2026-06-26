@@ -1,95 +1,88 @@
-# Gatofo Core Cell — Web Pairing Render Edition
+# Gatofo Core Cell — Pairing Fix Edition
 
-Versi ini dibuat agar lebih enak dideploy ke Render.
-
-Masalah sebelumnya:
+Versi ini memperbaiki masalah:
 
 ```text
-Build/start gagal karena bot worker tidak punya halaman pairing
-atau package Baileys tidak kebaca di environment Render.
+Pairing code muncul, tapi saat ditautkan di WhatsApp muncul:
+"Gagal menautkan perangkat"
 ```
 
-Versi ini sudah:
+Perubahan utama:
 
 ```text
-- Menggunakan @whiskeysockets/baileys
-- Node dipin ke 20.x
-- Render diubah dari worker menjadi web service
-- Ada halaman pairing code di browser
-- Tidak perlu input terminal interaktif
+1. Pairing code default sekarang pakai kode otomatis dari WhatsApp/Baileys.
+2. Custom pairing code dimatikan default karena bisa gagal di beberapa nomor.
+3. Ditambahkan tombol Reset Session di halaman web.
+4. Ditambahkan delay sebelum request pairing agar socket lebih siap.
+5. Browser identity diganti ke Browsers.ubuntu('Chrome').
+6. Auth key store memakai makeCacheableSignalKeyStore.
 ```
 
-## Cara kerja pairing web
+## Cara pairing yang disarankan
 
-Setelah deploy ke Render, buka URL service:
-
-```text
-https://nama-service.onrender.com
-```
-
-Lalu isi nomor bot:
+1. Deploy ke Render.
+2. Buka URL Render.
+3. Klik **Reset Session** dulu.
+4. Masukkan nomor bot format:
 
 ```text
 628xxxxxxxxxx
 ```
 
-Klik:
-
-```text
-Buat Pairing Code
-```
-
-Masukkan kode di:
+5. Klik **Buat Pairing Code Baru**.
+6. Masukkan kode terbaru di:
 
 ```text
 WhatsApp → Perangkat tertaut → Tautkan perangkat
 ```
 
-## Endpoint
-
-```text
-GET /
-GET /status
-GET /pair?phone=628xxxxxxxxxx
-GET /restart
-```
+Jangan pakai kode lama. Pairing code cepat kedaluwarsa.
 
 ## Env Render
 
-Minimal isi:
+Minimal:
 
 ```text
 BOT_NUMBER=628xxxxxxxxxx
 OWNER_NUMBERS=628xxxxxxxxxx
-CUSTOM_PAIRING=GATOFO25
 NODE_VERSION=20
+USE_CUSTOM_PAIRING=false
 ```
 
-`PHONE_NUMBER` tidak wajib lagi karena pairing bisa dibuat lewat web.
-
-## Render setting
-
-Gunakan:
+`CUSTOM_PAIRING` boleh tetap ada, tapi tidak dipakai kecuali:
 
 ```text
-Service Type: Web Service
-Build Command: npm install
-Start Command: npm start
+USE_CUSTOM_PAIRING=true
 ```
 
-Atau pakai `render.yaml` yang sudah tersedia.
-
-Kalau sebelumnya deploy gagal, lakukan:
+Untuk stabilitas, biarkan:
 
 ```text
-Manual Deploy → Clear build cache & deploy
+USE_CUSTOM_PAIRING=false
 ```
 
-## Catatan penting
+## Endpoint
 
-Render filesystem bisa ephemeral. Kalau session WhatsApp hilang setelah redeploy/restart, kamu perlu pairing ulang dari halaman web.
+```text
+/
+ /status
+ /pair?phone=628xxxxxxxxxx
+ /restart
+ /reset-session
+```
 
-Untuk pilot/testing masih aman. Untuk production serius, lebih baik pakai WhatsApp Business Platform resmi atau simpan session di storage persisten.
+## Jika masih gagal menautkan
+
+Coba urutan ini:
+
+```text
+1. Klik Reset Session
+2. Tunggu status berubah jadi waiting_pairing
+3. Buat Pairing Code Baru
+4. Langsung masukkan kode itu ke WhatsApp
+```
+
+Kalau tetap gagal, kemungkinan nomor terlalu sering pairing / WhatsApp membatasi percobaan. Tunggu beberapa menit lalu ulangi.
 
 ## Flow Gatofo
 
@@ -103,18 +96,4 @@ MULAI
 → ketik promo
 → Pakai
 → campaign aktif
-```
-
-## Command
-
-```text
-MULAI
-CARI makanan Malang
-CLAIM MISSION_ID
-CHECKIN KODE
-REKAP
-PARTNER
-OLLAMA
-AI PROMO
-AI TANYA ...
 ```

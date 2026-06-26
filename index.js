@@ -1,12 +1,16 @@
 import config from './settings.js'
 import http from 'http'
+import fs from 'fs'
+import path from 'path'
 import { URL } from 'url'
 import {
   makeWASocket,
   makeInMemoryStore,
   useMultiFileAuthState,
   DisconnectReason,
-  fetchLatestBaileysVersion
+  fetchLatestBaileysVersion,
+  makeCacheableSignalKeyStore,
+  Browsers
 } from '@dnuzi/baileys'
 import pino from 'pino'
 import chalk from 'chalk'
@@ -22,6 +26,7 @@ const PORT = Number(process.env.PORT || 3000)
 let sock = null
 let isStarting = false
 let reconnectTimer = null
+let lastStoreInterval = null
 
 const botState = {
   status: 'booting',
@@ -29,6 +34,7 @@ const botState = {
   registered: false,
   jid: '',
   pairingCode: '',
+  pairingCodeFormatted: '',
   lastPhone: '',
   lastError: '',
   updatedAt: new Date().toISOString()
@@ -36,6 +42,10 @@ const botState = {
 
 function setState(patch) {
   Object.assign(botState, patch, { updatedAt: new Date().toISOString() })
+}
+
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 function esc(text = '') {
@@ -48,10 +58,40 @@ function esc(text = '') {
   }[ch]))
 }
 
+function normalizePairingPhone(value = '') {
+  let n = cleanPhone(value)
+
+  if (n.startsWith('0')) n = `62${n.slice(1)}`
+  if (n.startsWith('8')) n = `62${n}`
+
+  if (!/^62\d{8,15}$/.test(n)) {
+    throw new Error('Nomor belum valid. Pakai format Indonesia: 628xxxxxxxxxx.')
+  }
+
+  return n
+}
+
+function formatPairingCode(code = '') {
+  const clean = String(code || '').replace(/\s+/g, '').toUpperCase()
+  return clean.match(/.{1,4}/g)?.join('-') || clean
+}
+
+function removePathSafe(target) {
+  try {
+    if (fs.existsSync(target)) {
+      fs.rmSync(target, { recursive: true, force: true })
+    }
+  } catch (error) {
+    console.log('Gagal hapus path:', target, error.message)
+  }
+}
+
 function renderHome() {
   const isConnected = botState.connected
   const codeBlock = botState.pairingCode
-    ? `<div class="code">${esc(botState.pairingCode)}</div><p>Masukkan kode ini di WhatsApp → Perangkat tertaut → Tautkan perangkat.</p>`
+    ? `<div class="code">${esc(botState.pairingCodeFormatted || botState.pairingCode)}</div>
+       <p><b>Gunakan kode terbaru ini.</b> Masukkan di WhatsApp → Perangkat tertaut → Tautkan perangkat.</p>
+       <p class="muted">Kalau muncul “gagal menautkan perangkat”, klik Reset Session dulu, lalu buat kode baru. Jangan pakai kode lama.</p>`
     : `<p class="muted">Belum ada pairing code. Masukkan nomor WhatsApp bot lalu klik Buat Pairing Code.</p>`
 
   return `<!doctype html>
@@ -62,7 +102,7 @@ function renderHome() {
   <title>${esc(config.botName)} Pairing</title>
   <style>
     body{font-family:Inter,system-ui,Arial,sans-serif;background:#f7f4ff;margin:0;color:#21172f}
-    .wrap{max-width:760px;margin:0 auto;padding:32px 18px}
+    .wrap{max-width:780px;margin:0 auto;padding:32px 18px}
     .card{background:white;border:1px solid #eadfff;border-radius:24px;padding:24px;box-shadow:0 18px 45px rgba(55,30,90,.10)}
     h1{margin:0 0 8px;font-size:28px}
     p{line-height:1.55}
@@ -71,11 +111,14 @@ function renderHome() {
     input{width:100%;box-sizing:border-box;padding:14px 16px;border-radius:14px;border:1px solid #d9c9ff;font-size:16px;margin:10px 0}
     button{border:0;border-radius:14px;padding:14px 16px;background:#6d4aff;color:white;font-weight:900;cursor:pointer;width:100%;font-size:16px}
     button:hover{filter:brightness(.96)}
-    .code{font-size:34px;letter-spacing:6px;font-weight:1000;background:#21172f;color:white;border-radius:18px;padding:18px;text-align:center;margin:18px 0}
+    .danger{background:#ff4a6a}
+    .secondary{background:#21172f}
+    .code{font-size:36px;letter-spacing:6px;font-weight:1000;background:#21172f;color:white;border-radius:18px;padding:18px;text-align:center;margin:18px 0}
     pre{background:#21172f;color:#fff;border-radius:18px;padding:16px;overflow:auto}
     .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
-    .mini{background:#faf7ff;border:1px solid #eadfff;border-radius:18px;padding:14px}
-    @media(max-width:640px){.grid{grid-template-columns:1fr}.code{font-size:26px}}
+    .mini{background:#faf7ff;border:1px solid #eadfff;border-radius:18px;padding:14px;word-break:break-word}
+    .actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+    @media(max-width:640px){.grid,.actions{grid-template-columns:1fr}.code{font-size:26px}}
   </style>
 </head>
 <body>
@@ -97,14 +140,19 @@ function renderHome() {
       <form method="POST" action="/pair">
         <label><b>Nomor WhatsApp Bot</b></label>
         <input name="phone" placeholder="628xxxxxxxxxx" value="${esc(botState.lastPhone || config.phoneNumber || config.botNumber || '')}">
-        <button type="submit">Buat Pairing Code</button>
+        <button type="submit">Buat Pairing Code Baru</button>
       </form>
+
+      <div class="actions">
+        <form method="POST" action="/restart"><button class="secondary" type="submit">Restart Socket</button></form>
+        <form method="POST" action="/reset-session" onsubmit="return confirm('Reset session akan menghapus login WhatsApp dan wajib pairing ulang. Lanjut?')"><button class="danger" type="submit">Reset Session</button></form>
+      </div>
 
       ${codeBlock}
 
       ${botState.lastError ? `<pre>${esc(botState.lastError)}</pre>` : ''}
 
-      <p class="muted">Endpoint: <code>/status</code>, <code>/pair?phone=628xxx</code>, <code>/restart</code></p>
+      <p class="muted">Endpoint: <code>/status</code>, <code>/pair?phone=628xxx</code>, <code>/restart</code>, <code>/reset-session</code></p>
     </div>
   </div>
 </body>
@@ -120,14 +168,38 @@ function send(res, status, body, type = 'application/json; charset=utf-8') {
 }
 
 async function requestPairing(phone) {
-  const clean = cleanPhone(phone || config.phoneNumber || config.botNumber)
-  if (!clean || clean === 'demo') throw new Error('Nomor belum valid. Pakai format 628xxxxxxxxxx.')
-  if (!sock) await connectToWhatsApp()
-  if (!sock) throw new Error('Socket WhatsApp belum siap. Tunggu beberapa detik lalu coba lagi.')
+  const clean = normalizePairingPhone(phone || config.phoneNumber || config.botNumber)
+  setState({ lastPhone: clean, pairingCode: '', pairingCodeFormatted: '', lastError: '', status: 'preparing_pairing' })
 
-  const code = await sock.requestPairingCode(clean, config.customPairing)
-  setState({ pairingCode: code, lastPhone: clean, lastError: '', status: 'pairing_code_ready' })
-  console.log(chalk.yellow(`\nPairing Code untuk ${clean}: ${code}\n`))
+  if (!sock) await connectToWhatsApp()
+  if (!sock) throw new Error('Socket WhatsApp belum siap. Klik Restart Socket lalu coba lagi.')
+
+  if (sock.authState?.creds?.registered || botState.connected) {
+    throw new Error('Session sudah registered/connected. Kalau WhatsApp belum benar-benar tertaut, klik Reset Session dulu lalu buat pairing code baru.')
+  }
+
+  // Beri waktu WebSocket Baileys benar-benar siap sebelum request pairing.
+  await wait(Number(process.env.PAIRING_READY_DELAY_MS || 1800))
+
+  // Custom pairing code sering bikin "gagal menautkan perangkat" di beberapa nomor.
+  // Default dibuat memakai kode resmi/generate otomatis dari WhatsApp.
+  let code
+  if (config.useCustomPairing && config.customPairing) {
+    code = await sock.requestPairingCode(clean, config.customPairing)
+  } else {
+    code = await sock.requestPairingCode(clean)
+  }
+
+  const formatted = formatPairingCode(code)
+  setState({
+    pairingCode: code,
+    pairingCodeFormatted: formatted,
+    lastPhone: clean,
+    lastError: '',
+    status: 'pairing_code_ready'
+  })
+
+  console.log(chalk.yellow(`\nPairing Code untuk ${clean}: ${formatted}\n`))
   return code
 }
 
@@ -147,7 +219,7 @@ function startHttpServer() {
       if (req.method === 'GET' && url.pathname === '/pair') {
         const phone = url.searchParams.get('phone') || config.phoneNumber || config.botNumber
         const code = await requestPairing(phone)
-        return send(res, 200, { ok: true, pairingCode: code, phone: cleanPhone(phone) })
+        return send(res, 200, { ok: true, pairingCode: code, pairingCodeFormatted: formatPairingCode(code), phone: normalizePairingPhone(phone) })
       }
 
       if (req.method === 'POST' && url.pathname === '/pair') {
@@ -158,20 +230,33 @@ function startHttpServer() {
             const params = new URLSearchParams(raw)
             const phone = params.get('phone') || config.phoneNumber || config.botNumber
             await requestPairing(phone)
-            res.writeHead(303, { location: '/' })
-            res.end()
           } catch (error) {
-            setState({ lastError: error.message })
-            res.writeHead(303, { location: '/' })
-            res.end()
+            setState({ lastError: error.message, status: 'pairing_failed' })
           }
+          res.writeHead(303, { location: '/' })
+          res.end()
         })
         return
       }
 
-      if (req.method === 'GET' && url.pathname === '/restart') {
+      if ((req.method === 'GET' || req.method === 'POST') && url.pathname === '/restart') {
         await restartBot()
+        if (req.method === 'POST') {
+          res.writeHead(303, { location: '/' })
+          res.end()
+          return
+        }
         return send(res, 200, { ok: true, message: 'restart requested', ...botState })
+      }
+
+      if ((req.method === 'GET' || req.method === 'POST') && url.pathname === '/reset-session') {
+        await resetSession()
+        if (req.method === 'POST') {
+          res.writeHead(303, { location: '/' })
+          res.end()
+          return
+        }
+        return send(res, 200, { ok: true, message: 'session reset', ...botState })
       }
 
       return send(res, 404, { ok: false, error: 'Not found' })
@@ -198,17 +283,22 @@ async function connectToWhatsApp() {
     sock = makeWASocket({
       version,
       logger,
-      auth: state,
+      auth: {
+        creds: state.creds,
+        keys: makeCacheableSignalKeyStore(state.keys, logger)
+      },
       printQRInTerminal: false,
       markOnlineOnConnect: true,
       syncFullHistory: false,
-      browser: ['Gatofo Core Cell', 'Chrome', '1.0.0']
+      browser: Browsers.ubuntu('Chrome')
     })
 
     const store = makeInMemoryStore({ logger })
     try { store.readFromFile(storePath) } catch {}
     store.bind(sock.ev)
-    setInterval(() => {
+
+    if (lastStoreInterval) clearInterval(lastStoreInterval)
+    lastStoreInterval = setInterval(() => {
       try { store.writeToFile(storePath) } catch {}
     }, 180000)
 
@@ -247,7 +337,15 @@ async function connectToWhatsApp() {
     })
 
     sock.ev.on('connection.update', async update => {
-      const { connection, lastDisconnect } = update
+      const { connection, lastDisconnect, qr } = update
+
+      if (qr) {
+        setState({ status: 'qr_ready_waiting_pairing' })
+      }
+
+      if (connection === 'connecting') {
+        setState({ status: 'connecting', connected: false })
+      }
 
       if (connection === 'open') {
         setState({
@@ -256,6 +354,7 @@ async function connectToWhatsApp() {
           registered: true,
           jid: sock.user?.id || '',
           pairingCode: '',
+          pairingCodeFormatted: '',
           lastError: ''
         })
         console.log(chalk.green(`${config.botName} connected`))
@@ -268,6 +367,7 @@ async function connectToWhatsApp() {
         setState({
           status: loggedOut ? 'logged_out' : 'disconnected',
           connected: false,
+          registered: Boolean(sock?.authState?.creds?.registered),
           jid: '',
           lastError: lastDisconnect?.error?.message || `Connection closed (${reason || 'unknown'})`
         })
@@ -276,7 +376,7 @@ async function connectToWhatsApp() {
           clearTimeout(reconnectTimer)
           reconnectTimer = setTimeout(() => connectToWhatsApp(), Number(process.env.RECONNECT_MS || 5000))
         } else {
-          console.log(chalk.red('Session logout. Buka halaman web lalu buat pairing code lagi.'))
+          console.log(chalk.red('Session logout. Klik Reset Session lalu buat pairing code baru.'))
         }
       }
     })
@@ -291,7 +391,7 @@ async function connectToWhatsApp() {
   }
 }
 
-async function restartBot() {
+async function stopSocket() {
   clearTimeout(reconnectTimer)
   reconnectTimer = null
 
@@ -302,7 +402,28 @@ async function restartBot() {
 
   sock = null
   isStarting = false
-  setState({ status: 'restarting', connected: false, jid: '', pairingCode: '' })
+}
+
+async function restartBot() {
+  await stopSocket()
+  setState({ status: 'restarting', connected: false, jid: '', pairingCode: '', pairingCodeFormatted: '' })
+  return connectToWhatsApp()
+}
+
+async function resetSession() {
+  await stopSocket()
+  removePathSafe(config.sessionName)
+  removePathSafe(storePath)
+  setState({
+    status: 'session_reset_waiting_pairing',
+    connected: false,
+    registered: false,
+    jid: '',
+    pairingCode: '',
+    pairingCodeFormatted: '',
+    lastError: ''
+  })
+  await wait(500)
   return connectToWhatsApp()
 }
 
