@@ -1,132 +1,111 @@
-# Gatofo Core Cell — Custom Promo + Render Edition
+# Gatofo Core Cell — Web Pairing Render Edition
 
-Versi ini sudah disederhanakan lagi:
+Versi ini dibuat agar lebih enak dideploy ke Render.
+
+Masalah sebelumnya:
+
+```text
+Build/start gagal karena bot worker tidak punya halaman pairing
+atau package Baileys tidak kebaca di environment Render.
+```
+
+Versi ini sudah:
+
+```text
+- Menggunakan @whiskeysockets/baileys
+- Node dipin ke 20.x
+- Render diubah dari worker menjadi web service
+- Ada halaman pairing code di browser
+- Tidak perlu input terminal interaktif
+```
+
+## Cara kerja pairing web
+
+Setelah deploy ke Render, buka URL service:
+
+```text
+https://nama-service.onrender.com
+```
+
+Lalu isi nomor bot:
+
+```text
+628xxxxxxxxxx
+```
+
+Klik:
+
+```text
+Buat Pairing Code
+```
+
+Masukkan kode di:
+
+```text
+WhatsApp → Perangkat tertaut → Tautkan perangkat
+```
+
+## Endpoint
+
+```text
+GET /
+GET /status
+GET /pair?phone=628xxxxxxxxxx
+GET /restart
+```
+
+## Env Render
+
+Minimal isi:
+
+```text
+BOT_NUMBER=628xxxxxxxxxx
+OWNER_NUMBERS=628xxxxxxxxxx
+CUSTOM_PAIRING=GATOFO25
+NODE_VERSION=20
+```
+
+`PHONE_NUMBER` tidak wajib lagi karena pairing bisa dibuat lewat web.
+
+## Render setting
+
+Gunakan:
+
+```text
+Service Type: Web Service
+Build Command: npm install
+Start Command: npm start
+```
+
+Atau pakai `render.yaml` yang sudah tersedia.
+
+Kalau sebelumnya deploy gagal, lakukan:
+
+```text
+Manual Deploy → Clear build cache & deploy
+```
+
+## Catatan penting
+
+Render filesystem bisa ephemeral. Kalau session WhatsApp hilang setelah redeploy/restart, kamu perlu pairing ulang dari halaman web.
+
+Untuk pilot/testing masih aman. Untuk production serius, lebih baik pakai WhatsApp Business Platform resmi atau simpan session di storage persisten.
+
+## Flow Gatofo
 
 ```text
 MULAI
 → pilih mood
 → ketik nama usaha + kota
 → validasi kategori jika perlu
-→ Mystery Box terbuka
-→ tap Kustom Promo
-→ ketik promo sendiri
-→ tap Pakai
+→ Mystery Box
+→ Kustom Promo
+→ ketik promo
+→ Pakai
+→ campaign aktif
 ```
 
-## Update 5.2 — Promo wajib kustom
-
-Di bagian Mystery Box, teks:
-
-```text
-Pilih promo cepat
-```
-
-sudah diganti menjadi:
-
-```text
-Contoh:
-```
-
-Bot tidak lagi memberi pilihan A/B/C sebagai promo siap pakai.
-
-Sekarang bot hanya menampilkan contoh promo, lalu tombol:
-
-```text
-Kustom Promo
-```
-
-Setelah tap tombol itu, owner menulis promonya sendiri.
-
-Contoh flow:
-
-```text
-MULAI
-Sepi
-The Harvest Malang
-Dessert / Roti
-Kustom Promo
-Diskon 10% cake ukuran 20 cm khusus hari ini
-Pakai
-```
-
-Tujuannya agar promo tidak terasa template dan owner benar-benar memakai promo yang sesuai kondisi usahanya.
-
-## Struktur
-
-```text
-index.js
-settings.js
-render.yaml
-.env.example
-src/
-  db.js
-  wa.js
-  ollama.js
-  gatofoEngine.js
-data/
-  gatofo-db.json
-```
-
-## Deploy ke Render
-
-Project sudah ditambahkan `render.yaml` untuk deploy sebagai **Background Worker**.
-
-Render Blueprint mendukung definisi service via `render.yaml`, termasuk background worker. Untuk env var, Render juga memang menyarankan konfigurasi lewat environment variables/secrets.
-
-### Env var wajib di Render
-
-Isi di Render Dashboard:
-
-```text
-PHONE_NUMBER=628xxxxxxxxxx
-BOT_NUMBER=628xxxxxxxxxx
-OWNER_NUMBERS=628xxxxxxxxxx
-CUSTOM_PAIRING=GATOFO25
-```
-
-Opsional:
-
-```text
-OLLAMA_BASE_URL=https://desktop-bh6k0ih.taildd515d.ts.net/api/tags
-OLLAMA_MODEL=
-USE_OLLAMA_FOR_CATEGORY=true
-CATEGORY_CONFIDENCE_THRESHOLD=0.72
-DEFAULT_CITY=Malang
-ALLOW_GROUPS=false
-```
-
-### Penting untuk pairing
-
-Di local, bot bisa meminta nomor lewat terminal.
-
-Di Render, tidak ada input terminal interaktif. Jadi `PHONE_NUMBER` wajib diisi sebagai environment variable.
-
-Saat pertama deploy, buka logs Render dan ambil:
-
-```text
-Pairing Code: XXXXXXXX
-```
-
-Masukkan kode itu di WhatsApp:
-
-```text
-WhatsApp → Perangkat tertaut → Tautkan perangkat
-```
-
-### Catatan session
-
-Session WhatsApp disimpan di folder `SESSION_DIR`.
-
-Kalau service restart dan session hilang, kamu perlu pairing ulang. Untuk pilot/testing masih aman, tapi untuk produksi sebaiknya pakai penyimpanan persisten atau layanan resmi WhatsApp Business Platform.
-
-## Install lokal
-
-```bash
-npm install
-npm start
-```
-
-## Command utama
+## Command
 
 ```text
 MULAI
@@ -139,40 +118,3 @@ OLLAMA
 AI PROMO
 AI TANYA ...
 ```
-
-
-## Fix Render dependency 5.2.1
-
-Jika muncul error:
-
-```text
-Cannot find package '@dnuzi/baileys'
-```
-
-penyebabnya adalah package fork `@dnuzi/baileys` tidak tersedia/terinstall di environment Render.
-
-Versi ini sudah diganti ke package yang lebih umum:
-
-```text
-@whiskeysockets/baileys
-```
-
-Saya juga menambahkan:
-
-```text
-.node-version
-.nvmrc
-engines.node = 20.x
-NODE_VERSION=20
-```
-
-Agar Render tidak memakai Node 24 secara otomatis.
-
-Kalau deploy ulang, pastikan Render menjalankan:
-
-```bash
-npm install
-npm start
-```
-
-Jika masih pakai cache lama, lakukan **Clear build cache & deploy** di Render.
