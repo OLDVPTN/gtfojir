@@ -66,7 +66,10 @@ export async function sendText(sock, jid, text, quoted = null) {
 }
 
 export async function sendButtons(sock, jid, text, buttons = [], quoted = null, footer = 'Gatofo Core Cell') {
-  const payload = {
+  const options = quoted ? { quoted } : {}
+
+  // Format custom/fork yang dipakai base simple-baseV2.
+  const forkPayload = {
     text,
     footer,
     buttons: buttons.map(button => ({
@@ -75,21 +78,40 @@ export async function sendButtons(sock, jid, text, buttons = [], quoted = null, 
     }))
   }
 
+  // Format legacy Baileys v6 / @whiskeysockets/baileys.
+  const legacyPayload = {
+    text,
+    footer,
+    buttons: buttons.map(button => ({
+      buttonId: button.id,
+      buttonText: { displayText: button.text },
+      type: 1
+    })),
+    headerType: 1
+  }
+
   try {
-    return await sock.sendMessage(jid, payload, quoted ? { quoted } : {})
+    return await sock.sendMessage(jid, forkPayload, options)
   } catch {
-    const fallback = [
-      text,
-      '',
-      'Pilihan:',
-      ...buttons.map((button, index) => `${index + 1}. ${button.text}`)
-    ].join('\n')
-    return await sendText(sock, jid, fallback, quoted)
+    try {
+      return await sock.sendMessage(jid, legacyPayload, options)
+    } catch {
+      const fallback = [
+        text,
+        '',
+        'Pilihan:',
+        ...buttons.map((button, index) => `${index + 1}. ${button.text}`)
+      ].join('\n')
+      return await sendText(sock, jid, fallback, quoted)
+    }
   }
 }
 
 export async function sendList(sock, jid, text, buttonText, rows = [], quoted = null, footer = 'Gatofo Core Cell') {
-  const payload = {
+  const options = quoted ? { quoted } : {}
+
+  // Format custom/fork base.
+  const forkPayload = {
     text,
     footer,
     buttons: [
@@ -105,14 +127,36 @@ export async function sendList(sock, jid, text, buttonText, rows = [], quoted = 
     ]
   }
 
+  // Format legacy list Baileys v6.
+  const legacyPayload = {
+    text,
+    footer,
+    title: buttonText,
+    buttonText,
+    sections: [
+      {
+        title: buttonText,
+        rows: rows.map(row => ({
+          title: row.title,
+          description: row.description,
+          rowId: row.id
+        }))
+      }
+    ]
+  }
+
   try {
-    return await sock.sendMessage(jid, payload, quoted ? { quoted } : {})
+    return await sock.sendMessage(jid, forkPayload, options)
   } catch {
-    const fallback = [
-      text,
-      '',
-      ...rows.map((row, index) => `${index + 1}. ${row.title}${row.description ? ` — ${row.description}` : ''}`)
-    ].join('\n')
-    return await sendText(sock, jid, fallback, quoted)
+    try {
+      return await sock.sendMessage(jid, legacyPayload, options)
+    } catch {
+      const fallback = [
+        text,
+        '',
+        ...rows.map((row, index) => `${index + 1}. ${row.title}${row.description ? ` — ${row.description}` : ''}`)
+      ].join('\n')
+      return await sendText(sock, jid, fallback, quoted)
+    }
   }
 }

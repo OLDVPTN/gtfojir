@@ -139,3 +139,40 @@ OLLAMA
 AI PROMO
 AI TANYA ...
 ```
+
+
+## Fix Render dependency 5.2.1
+
+Jika muncul error:
+
+```text
+Cannot find package '@dnuzi/baileys'
+```
+
+penyebabnya adalah package fork `@dnuzi/baileys` tidak tersedia/terinstall di environment Render.
+
+Versi ini sudah diganti ke package yang lebih umum:
+
+```text
+@whiskeysockets/baileys
+```
+
+Saya juga menambahkan:
+
+```text
+.node-version
+.nvmrc
+engines.node = 20.x
+NODE_VERSION=20
+```
+
+Agar Render tidak memakai Node 24 secara otomatis.
+
+Kalau deploy ulang, pastikan Render menjalankan:
+
+```bash
+npm install
+npm start
+```
+
+Jika masih pakai cache lama, lakukan **Clear build cache & deploy** di Render.
