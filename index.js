@@ -15,7 +15,7 @@ import {
 import pino from 'pino'
 import chalk from 'chalk'
 import { Boom } from '@hapi/boom'
-import { readDb, writeDb } from './src/db.js'
+import { initDb, readDb, writeDb, flushDb, closeDb, getDbStatus } from './src/db.js'
 import { cleanPhone, getMessageText, jidToPhone } from './src/wa.js'
 import { handleGatofoMessage } from './src/gatofoEngine.js'
 
@@ -133,6 +133,8 @@ function renderHome() {
         <div class="mini"><b>JID</b><br>${esc(botState.jid || '-')}</div>
         <div class="mini"><b>Registered</b><br>${botState.registered ? 'true' : 'false'}</div>
         <div class="mini"><b>Updated</b><br>${esc(botState.updatedAt)}</div>
+        <div class="mini"><b>Database</b><br>${esc(getDbStatus().mode)} ${getDbStatus().connected ? '✅' : '⚠️'}</div>
+        <div class="mini"><b>DB Table</b><br>${esc(getDbStatus().table || '-')}</div>
       </div>
 
       <hr style="border:0;border-top:1px solid #eee;margin:22px 0">
@@ -213,7 +215,7 @@ function startHttpServer() {
       }
 
       if (req.method === 'GET' && url.pathname === '/status') {
-        return send(res, 200, { ok: true, ...botState })
+        return send(res, 200, { ok: true, ...botState, db: getDbStatus() })
       }
 
       if (req.method === 'GET' && url.pathname === '/pair') {
@@ -427,15 +429,18 @@ async function resetSession() {
   return connectToWhatsApp()
 }
 
-process.on('SIGTERM', () => {
-  console.log('SIGTERM diterima. Bot berhenti dengan aman.')
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM diterima. Menyimpan data lalu berhenti.')
+  await closeDb().catch(() => {})
   process.exit(0)
 })
 
-process.on('SIGINT', () => {
-  console.log('SIGINT diterima. Bot berhenti dengan aman.')
+process.on('SIGINT', async () => {
+  console.log('SIGINT diterima. Menyimpan data lalu berhenti.')
+  await closeDb().catch(() => {})
   process.exit(0)
 })
 
 startHttpServer()
+await initDb()
 connectToWhatsApp()

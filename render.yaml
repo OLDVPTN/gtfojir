@@ -12,6 +12,14 @@ services:
         value: production
       - key: NODE_VERSION
         value: "20"
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_SSL
+        value: "true"
+      - key: DB_TABLE_NAME
+        value: gatofo_state
+      - key: DB_STATE_KEY
+        value: main
       - key: BOT_NUMBER
         sync: false
       - key: OWNER_NUMBERS

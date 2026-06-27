@@ -1,46 +1,43 @@
-# Gatofo Core Cell — Pairing Fix Edition
+# Gatofo Core Cell — Neon PostgreSQL Edition
 
-Versi ini memperbaiki masalah:
+Versi ini sudah tidak menyimpan data Gatofo ke JSON lokal.
 
-```text
-Pairing code muncul, tapi saat ditautkan di WhatsApp muncul:
-"Gagal menautkan perangkat"
-```
-
-Perubahan utama:
+Data sekarang disimpan ke PostgreSQL Neon melalui env:
 
 ```text
-1. Pairing code default sekarang pakai kode otomatis dari WhatsApp/Baileys.
-2. Custom pairing code dimatikan default karena bisa gagal di beberapa nomor.
-3. Ditambahkan tombol Reset Session di halaman web.
-4. Ditambahkan delay sebelum request pairing agar socket lebih siap.
-5. Browser identity diganti ke Browsers.ubuntu('Chrome').
-6. Auth key store memakai makeCacheableSignalKeyStore.
+DATABASE_URL
 ```
 
-## Cara pairing yang disarankan
+## Yang berubah
 
-1. Deploy ke Render.
-2. Buka URL Render.
-3. Klik **Reset Session** dulu.
-4. Masukkan nomor bot format:
+Sebelumnya:
 
 ```text
-628xxxxxxxxxx
+data/gatofo-db.json
 ```
 
-5. Klik **Buat Pairing Code Baru**.
-6. Masukkan kode terbaru di:
+Sekarang:
 
 ```text
-WhatsApp → Perangkat tertaut → Tautkan perangkat
+PostgreSQL Neon
+table: gatofo_state
+column: data JSONB
 ```
 
-Jangan pakai kode lama. Pairing code cepat kedaluwarsa.
+File `data/gatofo-db.json` sudah dihapus.
 
-## Env Render
+## Env wajib
 
-Minimal:
+Isi di Render:
+
+```text
+DATABASE_URL=postgresql://user:password@host.neon.tech/dbname?sslmode=require
+DATABASE_SSL=true
+DB_TABLE_NAME=gatofo_state
+DB_STATE_KEY=main
+```
+
+Env lain tetap:
 
 ```text
 BOT_NUMBER=628xxxxxxxxxx
@@ -49,40 +46,92 @@ NODE_VERSION=20
 USE_CUSTOM_PAIRING=false
 ```
 
-`CUSTOM_PAIRING` boleh tetap ada, tapi tidak dipakai kecuali:
+## Struktur database
 
-```text
-USE_CUSTOM_PAIRING=true
+Bot otomatis membuat table ini saat start:
+
+```sql
+CREATE TABLE IF NOT EXISTS gatofo_state (
+  key TEXT PRIMARY KEY,
+  data JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 ```
 
-Untuk stabilitas, biarkan:
+Data Gatofo disimpan sebagai 1 state JSONB:
 
 ```text
-USE_CUSTOM_PAIRING=false
+users
+cards
+missions
+claims
+partnerCodes
+invites
+logs
+stats
 ```
 
-## Endpoint
+Ini sengaja dibuat sederhana agar struktur kode lama tetap mudah dikembangkan. Kalau nanti traffic sudah besar, table bisa dinormalisasi menjadi `users`, `missions`, `claims`, dan lain-lain.
+
+## Render
+
+Gunakan:
 
 ```text
-/
- /status
- /pair?phone=628xxxxxxxxxx
- /restart
- /reset-session
+Service Type: Web Service
+Build Command: npm install
+Start Command: npm start
 ```
 
-## Jika masih gagal menautkan
-
-Coba urutan ini:
+Kalau sebelumnya sudah deploy, lakukan:
 
 ```text
-1. Klik Reset Session
-2. Tunggu status berubah jadi waiting_pairing
-3. Buat Pairing Code Baru
-4. Langsung masukkan kode itu ke WhatsApp
+Manual Deploy → Clear build cache & deploy
 ```
 
-Kalau tetap gagal, kemungkinan nomor terlalu sering pairing / WhatsApp membatasi percobaan. Tunggu beberapa menit lalu ulangi.
+Karena sekarang ada dependency baru:
+
+```text
+pg
+```
+
+## Cek koneksi database
+
+Buka:
+
+```text
+/status
+```
+
+Nanti ada bagian:
+
+```json
+"db": {
+  "mode": "postgres",
+  "connected": true,
+  "table": "gatofo_state",
+  "key": "main"
+}
+```
+
+Kalau `mode` masih `memory`, berarti `DATABASE_URL` belum diisi atau koneksi Neon gagal.
+
+## Pairing WhatsApp
+
+Buka URL Render:
+
+```text
+https://nama-service.onrender.com
+```
+
+Lalu:
+
+```text
+Reset Session
+Buat Pairing Code Baru
+Tautkan ke WhatsApp
+```
 
 ## Flow Gatofo
 

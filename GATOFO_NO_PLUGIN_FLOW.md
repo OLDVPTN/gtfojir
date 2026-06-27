@@ -1,4 +1,4 @@
-# Gatofo Flow — Custom Promo Edition
+# Gatofo Flow — Neon PostgreSQL Edition
 
 ## Flow utama
 
@@ -24,61 +24,46 @@ Pakai
 Campaign aktif
 ```
 
-## Mystery Box
+## Penyimpanan data
 
-Bot sekarang menampilkan:
+Tidak memakai JSON lokal lagi.
 
-```text
-Contoh:
-• Diskon 10% roti/dessert pilihan
-• Paket hemat dessert khusus Gatofo
-• Bonus item kecil untuk pembelian tertentu
-```
-
-Tombol:
+Sekarang data disimpan di Neon PostgreSQL:
 
 ```text
-Kustom Promo
-Batal
+DATABASE_URL
 ```
 
-Tidak ada lagi:
+Table otomatis:
 
 ```text
-A. Promo A
-B. Promo B
-C. Promo C
+gatofo_state
 ```
 
-## Alasan
-
-Promo tiap UMKM harus lebih fleksibel. Mystery Box memberi inspirasi, tapi final promo tetap dari owner.
-
-## Render
-
-File deploy:
+State yang disimpan:
 
 ```text
-render.yaml
+users
+cards
+missions
+claims
+partnerCodes
+invites
+logs
+stats
 ```
 
-Service type:
+## Cek status
 
 ```text
-worker
+/status
 ```
 
-Start command:
+Pastikan:
 
 ```text
-npm start
+db.mode = postgres
+db.connected = true
 ```
 
-Env wajib:
-
-```text
-PHONE_NUMBER
-BOT_NUMBER
-OWNER_NUMBERS
-CUSTOM_PAIRING
-```
+Kalau masih `memory`, env `DATABASE_URL` belum benar.
